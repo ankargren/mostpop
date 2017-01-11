@@ -13,15 +13,16 @@ library(httr)
 library(ggplot2)
 library(ggrepel)
 library(tidyverse)
+library(plotly)
 
 
 
 
-get_id <- function(search_name, HeaderValue) {
+get_id <- function(search_name, header_value) {
   band_nospace <- gsub(" ", "%20", search_name)
   artist_url <- paste0(paste0("https://api.spotify.com/v1/search?q=", band_nospace), "&type=artist")
   resp <- GET(url = artist_url, 
-              add_headers(Authorization = HeaderValue))
+              add_headers(Authorization = header_value))
   artist_items <- content(resp)$artists$items
   if (length(artist_items) == 0) {
     artist_id <- NULL 
@@ -35,9 +36,9 @@ get_id <- function(search_name, HeaderValue) {
   return(artist_id)
 }
 
-main_function <- function(band, country, HeaderValue) {
-  resp2 <- GET(url = paste0(paste0("https://api.spotify.com/v1/artists/", band), paste0("/albums?album_type=album&market=", country)),
-               add_headers(Authorization = HeaderValue))
+main_function <- function(band, header_value) {
+  resp2 <- GET(url = paste0("https://api.spotify.com/v1/artists/", band, "/albums?album_type=album"),
+               add_headers(Authorization = header_value))
   content_resp <- content(resp2)
   
   n_albums <- length(content_resp$items)
@@ -47,7 +48,7 @@ main_function <- function(band, country, HeaderValue) {
     album_IDs <- paste(sapply(1:n_albums, function(x) gsub("spotify:album:", "", content_resp$items[[x]]$uri)), collapse = ",")
     
     test <- GET(url = paste0("https://api.spotify.com/v1/albums?ids=", album_IDs), 
-                add_headers(Authorization = HeaderValue))
+                add_headers(Authorization = header_value))
     test2 <- content(test)
     
     plot_data <- data.frame(t(sapply(1:n_albums, function(x) c(test2$albums[[x]]$release_date, test2$albums[[x]]$popularity, test2$albums[[x]]$name, test2$albums[[x]]$uri))))
@@ -62,17 +63,19 @@ main_function <- function(band, country, HeaderValue) {
 }
 
 plot_function <- function(plot_data, band_name) {
-  ggplot(plot_data) + 
-                geom_point(aes(Date, Popularity), size = 5, color = "black", fill = "grey", stroke = 1, shape = 21) +
+  Album <- plot_data$Name
+  p <- ggplot(plot_data, aes(Date, Popularity, key = Album)) +
+    geom_hline(yintercept = max(plot_data$Popularity), linetype = "dashed", color = "gray") +
+                geom_point(size = 5, 
+                           color = "black", 
+                           fill = "grey", 
+                           stroke = 0.5, 
+                           shape = 21) +
                 xlab("Release date") + ylab("Popularity") + 
-                theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylim(0, 100) + 
-                geom_label_repel(
-                  aes(Date, Popularity, label = Name),
-                  fontface = 'bold', color = 'Red',
-                  box.padding = unit(0.25, "lines"),
-                  point.padding = unit(0.5, "lines"),
-                  size = 3
-                ) + ggtitle(paste(band_name, "Albums"))
+                theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    ylim(0, 100) + 
+  ggtitle(paste0('"', Album[which.max(plot_data$Popularity)], '" is the most popular album by ', band_name))
+  return(p)
 }
   
 wrapper_fun <- function(search_name) {
@@ -107,7 +110,7 @@ wrapper_fun <- function(search_name) {
     }
     band_ID <- id_res[row_select, 2]
     band_name <- ifelse(!is.null(id_res), as.character(id_res[row_select, 1]), search_name)
-    plot_data <- main_function(band_ID, "SE", header_value)
+    plot_data <- main_function(band_ID, header_value)
     artist_exists <- ifelse(!is.null(band_ID), TRUE, FALSE)
     search_success <- ifelse(!is.null(plot_data), TRUE, FALSE)
   } else {
@@ -132,10 +135,10 @@ wrapper_fun <- function(search_name) {
 }
 
 
-shinyServer(function(input, output) {
+shinyServer(function(input, output, session) {
   
     all_computations <- eventReactive(input$go, {wrapper_fun(input$search_name)})
-    output$Plot <- renderPlot({
+    output$Plot <- renderPlotly({
       all_comp <- all_computations()
       
       # Error message
@@ -152,7 +155,8 @@ shinyServer(function(input, output) {
       }
       
       if (all_comp$auth_success & all_comp$search_success) {
-        plot_function(all_comp$plot_data, all_comp$band_name)
+        p <- plot_function(all_comp$plot_data, all_comp$band_name)
+        ggplotly(p)
       } else {
         plot(1, type="n", axes=F, xlab="", ylab="", main = error_message)
       }
@@ -162,8 +166,15 @@ shinyServer(function(input, output) {
   output$player <- renderUI({ 
     all_comp <- all_computations()
     plot_data <- all_comp$plot_data
-    album_ID <- gsub("spotify:album:", "", plot_data[which.max(plot_data[, 2]), 4])
-    HTML(paste0('<iframe src="https://embed.spotify.com/?uri=spotify%3Aalbum%3A', album_ID, '&theme=white" width="300" height="380" frameborder="0" allowtransparency="true"></iframe>'))
+    d <- event_data("plotly_click")
+    if (is.null(d)) {
+       plot_ID <- plot_data$ID[which.max(plot_data[, 2])]
+    } else {
+      plot_ID <- plot_data$ID[which(plot_data$Name == d$key)]
+    }
+    album_ID <- gsub("spotify:album:", "", plot_ID)
+    HTML(paste0('<iframe src="https://embed.spotify.com/?uri=spotify%3Aalbum%3A', album_ID, '&theme=white" width="300" height="200" frameborder="0" allowtransparency="true"></iframe>'))
   })
+  
   
 })

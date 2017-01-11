@@ -29,5 +29,5 @@ shinyUI(fluidPage(
          uiOutput("player")
   )
   ),
-  plotOutput("Plot")
+  plotlyOutput("Plot")
 ))
