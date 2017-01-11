@@ -14,8 +14,7 @@ library(ggplot2)
 library(ggrepel)
 library(tidyverse)
 
-#clientID = 'a8ff287d905549a19a2a6463d48e44a2'
-#secret = '3a54a7a6f0ea4b2db4539c61b2a892da'
+
 
 
 get_id <- function(search_name, HeaderValue) {
@@ -64,7 +63,7 @@ main_function <- function(band, country, HeaderValue) {
 
 plot_function <- function(plot_data, band_name) {
   ggplot(plot_data) + 
-                geom_point(aes(Date, Popularity), size = 5, color = 'grey') +
+                geom_point(aes(Date, Popularity), size = 5, color = "black", fill = "grey", stroke = 1, shape = 21) +
                 xlab("Release date") + ylab("Popularity") + 
                 theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylim(0, 100) + 
                 geom_label_repel(
@@ -76,21 +75,28 @@ plot_function <- function(plot_data, band_name) {
                 ) + ggtitle(paste(band_name, "Albums"))
 }
   
-wrapper_fun <- function(search_name, clientID, secret) {
-  response = POST(
-    'https://accounts.spotify.com/api/token',
+wrapper_fun <- function(search_name) {
+  # Retrieve access token
+  clientID <- "a8ff287d905549a19a2a6463d48e44a2"
+  secret <- "3a54a7a6f0ea4b2db4539c61b2a892da"
+  response <- POST(
+    "https://accounts.spotify.com/api/token",
     accept_json(),
     authenticate(clientID, secret),
-    body = list(grant_type = 'client_credentials'),
-    encode = 'form'
+    body = list(grant_type = "client_credentials"),
+    encode = "form"
   )
   auth_success <- ifelse(is.null(content(response)$error), TRUE, FALSE)
   
   if (auth_success) {
-    mytoken = content(response)$access_token
-    HeaderValue = paste0('Bearer ', mytoken)
-    id_res <- get_id(search_name, HeaderValue)
+    access_token <- content(response)$access_token
+    header_value <- paste("Bearer", access_token)
+    id_res <- get_id(search_name, header_value)
     id_list <- setNames(as.list(id_res[, 2]), id_res[, 1])
+    ## Get the position of the artist we're looking for
+    # --- If there is an exact match (with everything in lower case), pick it
+    # --- If there are multiple matches, check case sensitive matches
+    # --- Otherwise, pick the most popular
     if (tolower(search_name) %in% tolower(id_res[, 1])) {
       row_select <- which(tolower(search_name) == tolower(id_res[, 1]))
       if (length(row_select) > 1) {
@@ -101,7 +107,7 @@ wrapper_fun <- function(search_name, clientID, secret) {
     }
     band_ID <- id_res[row_select, 2]
     band_name <- ifelse(!is.null(id_res), as.character(id_res[row_select, 1]), search_name)
-    plot_data <- main_function(band_ID, "SE", HeaderValue)
+    plot_data <- main_function(band_ID, "SE", header_value)
     artist_exists <- ifelse(!is.null(band_ID), TRUE, FALSE)
     search_success <- ifelse(!is.null(plot_data), TRUE, FALSE)
   } else {
@@ -114,7 +120,7 @@ wrapper_fun <- function(search_name, clientID, secret) {
   if (search_success) {
     plot_data <- plot_data %>%
       mutate(name = tolower(Name)) %>%
-      group_by(name) %>% top_n(n=1,wt=Popularity) %>%
+      group_by(name) %>% top_n(n = 1, wt = Popularity) %>%
       ungroup %>% select(-name) %>%
       as.data.frame()
   }
@@ -128,7 +134,7 @@ wrapper_fun <- function(search_name, clientID, secret) {
 
 shinyServer(function(input, output) {
   
-    all_computations <- reactive({wrapper_fun(input$search_name, input$clientID, input$secret)})
+    all_computations <- reactive({wrapper_fun(input$search_name)})
     output$Plot <- renderPlot({
       all_comp <- all_computations()
       
