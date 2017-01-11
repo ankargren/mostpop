@@ -134,7 +134,7 @@ wrapper_fun <- function(search_name) {
 
 shinyServer(function(input, output) {
   
-    all_computations <- reactive({wrapper_fun(input$search_name)})
+    all_computations <- eventReactive(input$go, {wrapper_fun(input$search_name)})
     output$Plot <- renderPlot({
       all_comp <- all_computations()
       
