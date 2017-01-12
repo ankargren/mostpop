@@ -4,6 +4,9 @@ library(ggplot2)
 library(tidyverse)
 library(plotly)
 
+clientID <- "YOUR ID"
+secret <- "YOUR SECRET"
+
 get_id <- function(search_name, header_value) {
   band_nospace <- gsub(" ", "%20", search_name)
   artist_url <- paste0(paste0("https://api.spotify.com/v1/search?q=", band_nospace), "&type=artist")
@@ -66,8 +69,6 @@ plot_function <- function(plot_data, band_name) {
 
 wrapper_fun <- function(search_name) {
   # Retrieve access token
-  clientID <- "a8ff287d905549a19a2a6463d48e44a2"
-  secret <- "3a54a7a6f0ea4b2db4539c61b2a892da"
   response <- POST(
     "https://accounts.spotify.com/api/token",
     accept_json(),
